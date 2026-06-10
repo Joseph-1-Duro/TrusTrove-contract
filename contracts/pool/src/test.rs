@@ -26,7 +26,9 @@ impl MockRegistry {
     }
 
     pub fn register(env: Env, address: Address) {
-        env.storage().persistent().set(&RegKey(address.clone()), &true);
+        env.storage()
+            .persistent()
+            .set(&RegKey(address.clone()), &true);
         env.storage()
             .persistent()
             .extend_ttl(&RegKey(address), 100, 2_000_000);

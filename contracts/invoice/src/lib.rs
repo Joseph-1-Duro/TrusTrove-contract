@@ -59,22 +59,16 @@ impl InvoiceContract {
 
         let mut args = Vec::new(&env);
         args.push_back(issuer.clone().into_val(&env));
-        let issuer_verified: bool = env.invoke_contract(
-            &registry_id,
-            &Symbol::new(&env, "is_verified"),
-            args,
-        );
+        let issuer_verified: bool =
+            env.invoke_contract(&registry_id, &Symbol::new(&env, "is_verified"), args);
         if !issuer_verified {
             panic_with_error!(&env, InvoiceError::IssuerNotVerified);
         }
 
         let mut args = Vec::new(&env);
         args.push_back(buyer.clone().into_val(&env));
-        let buyer_verified: bool = env.invoke_contract(
-            &registry_id,
-            &Symbol::new(&env, "is_verified"),
-            args,
-        );
+        let buyer_verified: bool =
+            env.invoke_contract(&registry_id, &Symbol::new(&env, "is_verified"), args);
         if !buyer_verified {
             panic_with_error!(&env, InvoiceError::BuyerNotVerified);
         }
@@ -323,11 +317,7 @@ impl InvoiceContract {
         let mut args = Vec::new(&env);
         args.push_back(invoice_id.clone().into_val(&env));
         args.push_back(invoice.face_value.into_val(&env));
-        let _: bool = env.invoke_contract(
-            &pool,
-            &Symbol::new(&env, "receive_repayment"),
-            args,
-        );
+        let _: bool = env.invoke_contract(&pool, &Symbol::new(&env, "receive_repayment"), args);
 
         let mut updated = invoice;
         updated.status = InvoiceStatus::Repaid;
@@ -388,11 +378,7 @@ impl InvoiceContract {
             .unwrap();
         let mut args = Vec::new(&env);
         args.push_back(invoice_id.clone().into_val(&env));
-        let _: bool = env.invoke_contract(
-            &pool,
-            &Symbol::new(&env, "handle_default"),
-            args,
-        );
+        let _: bool = env.invoke_contract(&pool, &Symbol::new(&env, "handle_default"), args);
         events::invoice_defaulted(&env, &invoice_id);
         true
     }

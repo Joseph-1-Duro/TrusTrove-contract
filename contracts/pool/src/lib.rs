@@ -1,8 +1,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, panic_with_error, token, Address, BytesN, Env, IntoVal, Symbol,
-    Vec,
+    contract, contractimpl, panic_with_error, token, Address, BytesN, Env, IntoVal, Symbol, Vec,
 };
 
 mod errors;
@@ -203,11 +202,8 @@ impl PoolContract {
 
         let mut args = Vec::new(&env);
         args.push_back(invoice_id.clone().into_val(&env));
-        let invoice_status: u32 = env.invoke_contract(
-            &invoice_contract,
-            &Symbol::new(&env, "get_status"),
-            args,
-        );
+        let invoice_status: u32 =
+            env.invoke_contract(&invoice_contract, &Symbol::new(&env, "get_status"), args);
         if invoice_status != 1 {
             // 1 = Listed
             panic_with_error!(&env, PoolError::InvoiceNotListed);
@@ -250,20 +246,13 @@ impl PoolContract {
         let mut args = Vec::new(&env);
         args.push_back(invoice_id.clone().into_val(&env));
         args.push_back(funded_amount.into_val(&env));
-        let _: bool = env.invoke_contract(
-            &escrow_contract,
-            &Symbol::new(&env, "lock"),
-            args,
-        );
+        let _: bool = env.invoke_contract(&escrow_contract, &Symbol::new(&env, "lock"), args);
 
         let mut args = Vec::new(&env);
         args.push_back(invoice_id.clone().into_val(&env));
         args.push_back(funded_amount.into_val(&env));
-        let _: bool = env.invoke_contract(
-            &invoice_contract,
-            &Symbol::new(&env, "mark_funded"),
-            args,
-        );
+        let _: bool =
+            env.invoke_contract(&invoice_contract, &Symbol::new(&env, "mark_funded"), args);
 
         env.storage()
             .instance()
@@ -365,11 +354,8 @@ impl PoolContract {
             .unwrap();
         let mut args = Vec::new(&env);
         args.push_back(invoice_id.clone().into_val(&env));
-        let _: bool = env.invoke_contract(
-            &escrow_contract,
-            &Symbol::new(&env, "handle_default"),
-            args,
-        );
+        let _: bool =
+            env.invoke_contract(&escrow_contract, &Symbol::new(&env, "handle_default"), args);
 
         let total_funded: u128 = env.storage().instance().get(&DataKey::TotalFunded).unwrap();
         let total_deposits: u128 = env
