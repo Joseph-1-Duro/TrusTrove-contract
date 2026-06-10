@@ -54,7 +54,7 @@ POOL_ID=$(stellar contract deploy \
 echo "Pool: $POOL_ID"
 
 echo ""
-echo "=== Initializing escrow with pool address ==="
+echo "=== Initializing escrow with pool and invoice addresses ==="
 stellar contract invoke \
   --id $ESCROW_ID \
   --source $DEPLOYER_ACCOUNT \
@@ -62,6 +62,7 @@ stellar contract invoke \
   -- initialize \
   --admin $(stellar keys address $DEPLOYER_ACCOUNT) \
   --pool_contract $POOL_ID \
+  --invoice_contract $INVOICE_ID \
   --usdc_asset $USDC_ISSUER
 
 echo ""
