@@ -1,130 +1,205 @@
-# TrusTrove Contracts
+<p align="center">
+  <img src="https://trustrove.vercel.app/og-image.png" alt="TrusTrove Contracts" width="600" />
+</p>
 
-Decentralized trade finance protocol on Stellar. SMEs tokenize unpaid invoices and receive immediate USDC funding from a liquidity pool. Built with Soroban smart contracts.
+<h1 align="center">TrusTrove — Smart Contracts</h1>
 
-## Architecture
+<p align="center">
+  Four Soroban smart contracts powering the TrusTrove trade finance protocol on Stellar.
+</p>
 
-Four Soroban contracts in a Cargo workspace, deployed in dependency order:
+<p align="center">
+  <a href="https://github.com/TrusTrove/TrusTrove-contract/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/TrusTrove/TrusTrove-contract/ci.yml?branch=main&label=build" />
+  </a>
+  <img src="https://img.shields.io/badge/rust-1.85.0-orange" />
+  <img src="https://img.shields.io/badge/soroban--sdk-21.7.6-blueviolet" />
+  <img src="https://img.shields.io/badge/network-Stellar%20Testnet-00c9a7" />
+  <img src="https://img.shields.io/github/license/TrusTrove/TrusTrove-contract" />
+</p>
+
+<p align="center">
+  <a href="https://trustrove.vercel.app">Live App</a> ·
+  <a href="https://github.com/TrusTrove/TrusTrove-app">App Repo</a> ·
+  <a href="https://stellar.expert/explorer/testnet">Stellar Explorer</a>
+</p>
+
+---
+
+## What is TrusTrove?
+
+TrusTrove is a decentralized trade finance protocol on Stellar. SMEs tokenize unpaid invoices and receive immediate USDC funding from a shared liquidity pool. Liquidity providers deposit USDC and earn yield from discount fees when invoices repay. No banks, no brokers — four Soroban smart contracts handle everything.
+
+---
+
+## Maintainers
+
+| | Name | Role | GitHub | Telegram |
+|---|---|---|---|---|
+| | **Fuhad (K1NGD4VID)** | Founder & Lead Developer | [@k1ngd4vid](https://github.com/k1ngd4vid) | [@k1ngd4vid](https://t.me/k1ngd4vid) |
+
+Join the contributor community: **[t.me/trusttrove](https://t.me/trusttrove)**
+
+---
+
+## Contracts
+
+### registry_contract
+
+Tracks verified SME issuers and buyers. Every other contract calls `is_verified()` before allowing any action.
 
 ```
-registry → invoice → escrow → pool
+initialize(admin)
+register_issuer(address, metadata) → bool
+register_buyer(address, metadata) → bool
+is_verified(address) → bool
+get_profile(address) → Profile
+revoke(address) → bool
 ```
 
-### Contract Overview
+### invoice_contract
 
-| Contract | Purpose |
-|---|---|
-| **registry** | Single source of truth for verified issuers and buyers |
-| **invoice** | Full invoice lifecycle — create, list, fund, ship, confirm, repay, default |
-| **escrow** | USDC custody between funding and repayment, callable only by pool |
-| **pool** | USDC liquidity pool with share-based LP accounting and yield distribution |
-
-### Invoice Lifecycle
+Manages the full invoice lifecycle. Enforces valid state transitions. Emits events consumed by the Go indexer.
 
 ```
-CREATED → LISTED → FUNDED → ACTIVE → CONFIRMED → REPAID
-                                    ↘ DEFAULTED
+Created → Listed → Funded → Active → Confirmed → Repaid
+                                    ↘ Defaulted
 ```
 
-## Prerequisites
+```
+create(issuer, buyer, face_value, due_date) → invoice_id
+list_for_financing(invoice_id, discount_bps) → bool
+mark_funded(invoice_id, funded_amount) → bool   ← pool_contract only
+mark_shipped(invoice_id) → bool
+confirm_delivery(invoice_id, confirmer) → bool  ← dual confirmation required
+repay(invoice_id) → bool
+trigger_default(invoice_id) → bool
+get(invoice_id) → Invoice
+get_by_status(status) → Vec<Invoice>
+get_by_issuer(address) → Vec<Invoice>
+```
 
-- Rust 1.74+ with `wasm32-unknown-unknown` target
-- Stellar CLI (`stellar`)
+### escrow_contract
+
+Holds USDC between pool funding and issuer payout. Only callable by `pool_contract`.
+
+```
+lock(invoice_id, amount) → bool
+release_to_issuer(invoice_id) → bool
+release_to_pool(invoice_id, repayment_amount) → bool
+handle_default(invoice_id) → bool
+get_locked(invoice_id) → u128
+```
+
+### pool_contract
+
+USDC liquidity pool with share-based LP accounting. Share price grows as invoices repay.
+
+```
+deposit(lp, usdc_amount) → shares
+withdraw(lp, shares) → usdc_amount
+fund_invoice(invoice_id) → bool
+receive_repayment(invoice_id, amount) → bool  ← invoice_contract only
+handle_default(invoice_id) → bool
+get_stats() → PoolStats
+get_lp_position(address) → LPPosition
+```
+
+---
+
+## Deployed Contracts (Stellar Testnet)
+
+| Contract | Address |
+|----------|---------|
+| registry_contract | `CABGWVIZFF62FG67ZGFEP67NEEY4WYTMFURDMFTKKNRDAFPKPOJDTN4C` |
+| invoice_contract | `CA4O3MR7LWHRSUDBNU6FY6UDFFYBN7TGBZXBDZB4OYYXFYXIFJ6RJF6B` |
+| escrow_contract | `CAJWGUKDTTC3SKN4RAAY72J4DVIIYSCFHX6GIMNTT22ABMISJK4GBCEH` |
+| pool_contract | `CAKEWH7SJCXGV2MH2WZYIX3QDPTSSBQFXYVYBOWAGLNBBZMPLE2US6CS` |
+
+Verify on [Stellar Expert Testnet](https://stellar.expert/explorer/testnet)
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- Rust 1.85.0 (required — other versions either have WASM bugs or are blocked by Stellar CLI)
+- [Stellar CLI](https://github.com/stellar/stellar-cli) (latest)
+
+### 1. Install Rust 1.85.0
 
 ```bash
-rustup target add wasm32-unknown-unknown
+rustup toolchain install 1.85.0
+rustup target add wasm32v1-none --toolchain 1.85.0
 ```
 
-## Build
+### 2. Clone and build
 
 ```bash
-# Build all contracts (debug)
-cargo build --workspace
+git clone https://github.com/TrusTrove/TrusTrove-contract.git
+cd TrusTrove-contract
+rustup run 1.85.0 stellar contract build
+```
 
-# Build WASM release artifacts
-cargo build --workspace --release --target wasm32-unknown-unknown
+### 3. Run tests
 
-# Run all tests
+```bash
 cargo test --workspace
 ```
 
-WASM files are output to `target/wasm32-unknown-unknown/release/*.wasm`.
-
-## Test
+### 4. Deploy to testnet
 
 ```bash
-# Run all workspace tests
-cargo test --workspace
+# Create and fund a deployer account
+bash scripts/setup-testnet.sh
 
-# Run tests for a specific contract
-cargo test -p trusttrove-pool
+# Fund via browser: https://friendbot.stellar.org/?addr=YOUR_ADDRESS
+
+# Deploy all four contracts
+bash scripts/deploy.sh
 ```
 
-## Deploy to Testnet
+The deploy script prints all four contract IDs at the end. Paste them into `TrusTrove-app/.env.local`.
 
-### 1. Create and fund deployer account
+---
 
-```bash
-chmod +x scripts/setup-testnet.sh
-./scripts/setup-testnet.sh
-```
+## Contributing
 
-### 2. Deploy all contracts
+We welcome contributions from Rust and Soroban developers. Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a PR.
 
-```bash
-chmod +x scripts/deploy.sh
-./scripts/deploy.sh
-```
+### Find an issue
 
-The deploy script:
-1. Builds all contracts to WASM
-2. Deploys registry → invoice → escrow → pool in order
-3. Initializes each contract with the correct cross-contract addresses
-4. Outputs contract IDs for use in the frontend
+Issues are labeled by contract and complexity:
+- `complexity:low` — isolated function or test, good entry point
+- `complexity:medium` — touches contract logic and storage
+- `complexity:high` — cross-contract interactions or new mechanics
 
-### 3. Configure frontend
+### Key conventions
 
-Copy the contract IDs from the deploy output into your `trusttrove-app` `.env.local`:
+- All amounts use `u128` in stroops (1 USDC = 10,000,000)
+- All timestamps use `u64` Unix seconds
+- Every `persistent().set()` must be followed by `extend_ttl()`
+- Use `panic_with_error!` with typed errors — no bare `panic!` or `unwrap()` in production paths
+
+### Commit format
 
 ```
-NEXT_PUBLIC_REGISTRY_CONTRACT_ID=...
-NEXT_PUBLIC_INVOICE_CONTRACT_ID=...
-NEXT_PUBLIC_ESCROW_CONTRACT_ID=...
-NEXT_PUBLIC_POOL_CONTRACT_ID=...
+feat(registry): add batch issuer registration function
+fix(pool): guard against division by zero when total_shares is 0
+test(invoice): add full lifecycle integration test
 ```
 
-## Environment Variables
+If you have questions, reach us on Telegram: **[t.me/trusttrove](https://t.me/trusttrove)**
 
-See `.env.example` for all required variables:
+---
 
-| Variable | Description |
-|---|---|
-| `STELLAR_NETWORK` | Network name (`testnet` or `mainnet`) |
-| `STELLAR_RPC_URL` | Soroban RPC endpoint |
-| `STELLAR_NETWORK_PASSPHRASE` | Network passphrase for signing |
-| `DEPLOYER_ACCOUNT` | Stellar CLI key alias for deployment |
-| `USDC_ISSUER` | USDC asset issuer on Stellar |
-| `USDC_ASSET_CODE` | Asset code (`USDC`) |
+## License
 
-## Cross-Contract Dependencies
+MIT
 
-```
-registry_contract (source of truth for verification)
-    ↑
-invoice_contract (calls registry.is_verified)
-    ↑↓
-pool_contract (calls invoice.get_status, mark_funded)
-    ↑↓
-escrow_contract (called by pool for lock/release)
-```
+---
 
-All cross-contract addresses are stored in instance storage at `initialize()` time.
+## Contributors
 
-## Security
-
-- All amounts in stroops (1 USDC = 10,000,000 stroops)
-- Percentage math uses basis points (bps), never floating point
-- Integer overflow protection enabled in release profile
-- Every persistent `set()` is followed by `extend_ttl()` to prevent storage expiry
-- Admin-only functions gated by `require_auth()` on the stored admin address
-- Cross-contract calls authenticated via contract address `require_auth()`
+[![Contributors](https://contrib.rocks/image?repo=TrusTrove/TrusTrove-contract)](https://github.com/TrusTrove/TrusTrove-contract/graphs/contributors)
