@@ -108,11 +108,15 @@ impl EscrowContract {
         pool.require_auth();
 
         let key = DataKey::Locked(invoice_id.clone());
-        let _record: EscrowRecord = env
+        let record: EscrowRecord = env
             .storage()
             .persistent()
             .get(&key)
             .unwrap_or_else(|| panic_with_error!(&env, EscrowError::NotFound));
+
+        if repayment_amount != record.amount {
+            panic_with_error!(&env, EscrowError::InvalidAmount);
+        }
 
         let usdc_id: Address = env.storage().instance().get(&DataKey::UsdcAsset).unwrap();
         let usdc = token::Client::new(&env, &usdc_id);

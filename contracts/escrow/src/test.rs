@@ -148,12 +148,24 @@ fn test_release_to_pool_transfers_correct_amount() {
     let amount: u128 = 1_000_000_000;
 
     client.lock(&invoice_id, &amount);
-    let repayment: u128 = 1_050_000_000;
+    let repayment: u128 = amount;
     let result = client.release_to_pool(&invoice_id, &repayment);
     assert!(result);
 
     let locked = client.get_locked(&invoice_id);
     assert_eq!(locked, 0);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #5)")]
+fn test_release_to_pool_fails_on_mismatched_repayment_amount() {
+    let (env, client, _admin, _pool, _usdc) = setup();
+    let invoice_id = generate_invoice_id(&env);
+    let amount: u128 = 1_000_000_000;
+
+    client.lock(&invoice_id, &amount);
+    let invalid_repayment: u128 = amount + 1;
+    client.release_to_pool(&invoice_id, &invalid_repayment);
 }
 
 #[test]
