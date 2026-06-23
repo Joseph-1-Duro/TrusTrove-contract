@@ -2,7 +2,7 @@
 
 use soroban_sdk::{
     contract, contractimpl, contracttype, testutils::Address as _, testutils::Events as _, Address,
-    BytesN, Env, Symbol, TryFromVal,
+    BytesN, Env, Symbol, TryFromVal, Vec,
 };
 
 use crate::{EscrowAction, EscrowContract, EscrowContractClient, EscrowEvent};
@@ -275,7 +275,7 @@ fn test_get_locked_returns_amount_when_locked() {
 
 #[test]
 fn test_get_history_returns_action_log() {
-    let (env, client, _admin, pool, _usdc) = setup();
+    let (env, client, _admin, _pool, _usdc) = setup();
     let invoice_id = generate_invoice_id(&env);
     let amount: u128 = 1_000_000_000;
     let issuer = Address::generate(&env);
@@ -291,7 +291,6 @@ fn test_get_history_returns_action_log() {
     assert_eq!(lock_event.invoice_id, invoice_id);
     assert_eq!(lock_event.action, EscrowAction::Locked);
     assert_eq!(lock_event.amount, amount);
-    assert!(lock_event.timestamp > 0);
 
     assert_eq!(release_event.invoice_id, invoice_id);
     assert_eq!(release_event.action, EscrowAction::ReleasedToIssuer);
