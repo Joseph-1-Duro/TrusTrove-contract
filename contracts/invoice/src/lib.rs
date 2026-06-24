@@ -141,13 +141,9 @@ impl InvoiceContract {
             .persistent()
             .extend_ttl(&inv_key, 100, 2_000_000);
 
-        self::extend_index(&env, &DataKey::InvoicesByIssuer(issuer), &invoice_id);
-        self::extend_index(&env, &DataKey::InvoicesByBuyer(buyer), &invoice_id);
-        self::extend_index(
-            &env,
-            &DataKey::InvoicesByStatus(InvoiceStatus::Created as u32),
-            &invoice_id,
-        );
+        self::extend_issuer_index(&env, &issuer, &invoice_id);
+        self::extend_buyer_index(&env, &buyer, &invoice_id);
+        self::extend_status_index(&env, InvoiceStatus::Created, &invoice_id);
         Self::extend_instance_ttl(&env);
 
         events::invoice_created(
@@ -449,33 +445,43 @@ impl InvoiceContract {
     }
 
     pub fn get_by_status(env: Env, status: InvoiceStatus) -> Vec<Invoice> {
-        let ids: Vec<BytesN<32>> = env
+        let count: u32 = env
             .storage()
             .persistent()
-            .get(&DataKey::InvoicesByStatus(status as u32))
-            .unwrap_or(Vec::new(&env));
+            .get(&DataKey::StatusIndexCount(status as u32))
+            .unwrap_or(0);
         let mut result: Vec<Invoice> = Vec::new(&env);
-        for i in 0..ids.len() {
-            let id = ids.get(i).unwrap();
+        for i in 0..count {
+            let id: BytesN<32> = env
+                .storage()
+                .persistent()
+                .get(&DataKey::StatusIndexEntry(status as u32, i))
+                .unwrap();
             let invoice: Invoice = env
                 .storage()
                 .persistent()
                 .get(&DataKey::Invoice(id))
                 .unwrap();
-            result.push_back(invoice);
+            if invoice.status == status {
+                result.push_back(invoice);
+            }
         }
         result
     }
 
     pub fn get_by_issuer(env: Env, address: Address) -> Vec<Invoice> {
-        let ids: Vec<BytesN<32>> = env
+        let count: u32 = env
             .storage()
             .persistent()
-            .get(&DataKey::InvoicesByIssuer(address))
-            .unwrap_or(Vec::new(&env));
+            .get(&DataKey::IssuerIndexCount(address.clone()))
+            .unwrap_or(0);
         let mut result: Vec<Invoice> = Vec::new(&env);
-        for i in 0..ids.len() {
-            let id = ids.get(i).unwrap();
+        for i in 0..count {
+            let id: BytesN<32> = env
+                .storage()
+                .persistent()
+                .get(&DataKey::IssuerIndexEntry(address.clone(), i))
+                .unwrap();
             let invoice: Invoice = env
                 .storage()
                 .persistent()
@@ -487,14 +493,18 @@ impl InvoiceContract {
     }
 
     pub fn get_by_buyer(env: Env, address: Address) -> Vec<Invoice> {
-        let ids: Vec<BytesN<32>> = env
+        let count: u32 = env
             .storage()
             .persistent()
-            .get(&DataKey::InvoicesByBuyer(address))
-            .unwrap_or(Vec::new(&env));
+            .get(&DataKey::BuyerIndexCount(address.clone()))
+            .unwrap_or(0);
         let mut result: Vec<Invoice> = Vec::new(&env);
-        for i in 0..ids.len() {
-            let id = ids.get(i).unwrap();
+        for i in 0..count {
+            let id: BytesN<32> = env
+                .storage()
+                .persistent()
+                .get(&DataKey::BuyerIndexEntry(address.clone(), i))
+                .unwrap();
             let invoice: Invoice = env
                 .storage()
                 .persistent()
@@ -506,43 +516,51 @@ impl InvoiceContract {
     }
 }
 
-fn extend_index(env: &Env, key: &DataKey, invoice_id: &BytesN<32>) {
-    let mut ids: Vec<BytesN<32>> = env.storage().persistent().get(key).unwrap_or(Vec::new(env));
-    ids.push_back(invoice_id.clone());
-    env.storage().persistent().set(key, &ids);
-    env.storage().persistent().extend_ttl(key, 100, 2_000_000);
+fn extend_issuer_index(env: &Env, issuer: &Address, invoice_id: &BytesN<32>) {
+    let count_key = DataKey::IssuerIndexCount(issuer.clone());
+    let count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
+    let entry_key = DataKey::IssuerIndexEntry(issuer.clone(), count);
+    env.storage().persistent().set(&entry_key, invoice_id);
+    env.storage().persistent().set(&count_key, &(count + 1));
+    env.storage()
+        .persistent()
+        .extend_ttl(&entry_key, 100, 2_000_000);
+    env.storage()
+        .persistent()
+        .extend_ttl(&count_key, 100, 2_000_000);
 }
 
-fn move_status_index(env: &Env, invoice_id: &BytesN<32>, from: InvoiceStatus, to: InvoiceStatus) {
-    let from_key = DataKey::InvoicesByStatus(from as u32);
-    let mut from_ids: Vec<BytesN<32>> = env
-        .storage()
-        .persistent()
-        .get(&from_key)
-        .unwrap_or(Vec::new(env));
-    let mut filtered: Vec<BytesN<32>> = Vec::new(env);
-    for id in from_ids.iter() {
-        if id != *invoice_id {
-            filtered.push_back(id);
-        }
-    }
-    from_ids = filtered;
-    env.storage().persistent().set(&from_key, &from_ids);
+fn extend_buyer_index(env: &Env, buyer: &Address, invoice_id: &BytesN<32>) {
+    let count_key = DataKey::BuyerIndexCount(buyer.clone());
+    let count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
+    let entry_key = DataKey::BuyerIndexEntry(buyer.clone(), count);
+    env.storage().persistent().set(&entry_key, invoice_id);
+    env.storage().persistent().set(&count_key, &(count + 1));
     env.storage()
         .persistent()
-        .extend_ttl(&from_key, 100, 2_000_000);
+        .extend_ttl(&entry_key, 100, 2_000_000);
+    env.storage()
+        .persistent()
+        .extend_ttl(&count_key, 100, 2_000_000);
+}
 
-    let to_key = DataKey::InvoicesByStatus(to as u32);
-    let mut to_ids: Vec<BytesN<32>> = env
-        .storage()
-        .persistent()
-        .get(&to_key)
-        .unwrap_or(Vec::new(env));
-    to_ids.push_back(invoice_id.clone());
-    env.storage().persistent().set(&to_key, &to_ids);
+fn extend_status_index(env: &Env, status: InvoiceStatus, invoice_id: &BytesN<32>) {
+    let status_u32 = status as u32;
+    let count_key = DataKey::StatusIndexCount(status_u32);
+    let count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
+    let entry_key = DataKey::StatusIndexEntry(status_u32, count);
+    env.storage().persistent().set(&entry_key, invoice_id);
+    env.storage().persistent().set(&count_key, &(count + 1));
     env.storage()
         .persistent()
-        .extend_ttl(&to_key, 100, 2_000_000);
+        .extend_ttl(&entry_key, 100, 2_000_000);
+    env.storage()
+        .persistent()
+        .extend_ttl(&count_key, 100, 2_000_000);
+}
+
+fn move_status_index(env: &Env, invoice_id: &BytesN<32>, _from: InvoiceStatus, to: InvoiceStatus) {
+    extend_status_index(env, to, invoice_id);
 }
 
 impl InvoiceContract {
