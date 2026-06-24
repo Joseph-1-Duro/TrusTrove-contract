@@ -2,10 +2,10 @@
 
 use soroban_sdk::{
     contract, contractimpl, contracttype, testutils::Address as _, testutils::Events as _, Address,
-    BytesN, Env, Symbol, TryFromVal,
+    BytesN, Env, Symbol, TryFromVal, Vec,
 };
 
-use crate::{EscrowContract, EscrowContractClient};
+use crate::{EscrowAction, EscrowContract, EscrowContractClient, EscrowEvent};
 
 #[contract]
 pub struct MockToken;
@@ -271,6 +271,40 @@ fn test_get_locked_returns_amount_when_locked() {
 
     client.lock(&invoice_id, &amount);
     assert_eq!(client.get_locked(&invoice_id), amount);
+}
+
+#[test]
+fn test_get_history_returns_action_log() {
+    let (env, client, _admin, _pool, _usdc) = setup();
+    let invoice_id = generate_invoice_id(&env);
+    let amount: u128 = 1_000_000_000;
+    let issuer = Address::generate(&env);
+
+    client.lock(&invoice_id, &amount);
+    client.release_to_issuer(&invoice_id, &issuer);
+
+    let history: Vec<EscrowEvent> = client.get_history(&invoice_id);
+    assert_eq!(history.len(), 2);
+    let lock_event = history.get(0).unwrap();
+    let release_event = history.get(1).unwrap();
+
+    assert_eq!(lock_event.invoice_id, invoice_id);
+    assert_eq!(lock_event.action, EscrowAction::Locked);
+    assert_eq!(lock_event.amount, amount);
+
+    assert_eq!(release_event.invoice_id, invoice_id);
+    assert_eq!(release_event.action, EscrowAction::ReleasedToIssuer);
+    assert_eq!(release_event.amount, amount);
+    assert!(release_event.timestamp >= lock_event.timestamp);
+
+    assert_eq!(client.get_locked(&invoice_id), 0);
+    assert_last_event_three(
+        &env,
+        "released_to_issuer",
+        invoice_id.clone(),
+        issuer,
+        amount,
+    );
 }
 
 #[test]

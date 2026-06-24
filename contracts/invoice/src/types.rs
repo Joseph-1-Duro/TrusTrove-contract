@@ -10,6 +10,7 @@ pub enum InvoiceStatus {
     Confirmed,
     Repaid,
     Defaulted,
+    Expired,
 }
 
 #[contracttype]
@@ -24,6 +25,7 @@ pub struct Invoice {
     pub due_date: u64,
     pub status: InvoiceStatus,
     pub created_at: u64,
+    pub listed_at: Option<u64>,
     pub funded_at: Option<u64>,
     pub shipped_at: Option<u64>,
     pub issuer_confirmed: bool,
@@ -46,4 +48,8 @@ pub enum DataKey {
     IssuerIndexEntry(Address, u32),
     BuyerIndexEntry(Address, u32),
     StatusIndexEntry(u32, u32),
+    InvoicesByIssuer(Address),
+    InvoicesByBuyer(Address),
+    InvoicesByStatus(u32),
+    ExpiryWindow,
 }
