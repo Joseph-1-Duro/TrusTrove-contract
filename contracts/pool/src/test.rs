@@ -453,3 +453,69 @@ fn test_multiple_lps_can_deposit() {
     assert_eq!(stats.total_shares, 30_000_000_000);
     assert_eq!(stats.total_deposits, 30_000_000_000);
 }
+
+// ============== REPAYMENT TESTS ==============
+
+#[test]
+fn test_receive_repayment() {
+    let te = setup();
+    te.pool.deposit(&te.lp, &100_000_000_000);
+    let invoice_id = create_and_list(&te, &te.usdc_id);
+    te.pool.fund_invoice(&invoice_id);
+
+    // face_value=10_000_000_000, discount_bps=200
+    // funded_amount = 10_000_000_000 * (10000 - 200) / 10000 = 9_800_000_000
+    let yield_amount = 200_000_000;
+
+    let before = te.pool.get_stats();
+    let result = te.pool.receive_repayment(&invoice_id, &10_000_000_000);
+    assert!(result);
+
+    let after = te.pool.get_stats();
+    assert_eq!(after.total_deposits, before.total_deposits + yield_amount);
+    assert_eq!(after.total_yield_distributed, yield_amount);
+    assert_eq!(after.total_funded, 0);
+    assert_eq!(after.active_invoice_count, 0);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #4)")]
+fn test_receive_repayment_panics_when_amount_below_funded() {
+    let te = setup();
+    te.pool.deposit(&te.lp, &100_000_000_000);
+    let invoice_id = create_and_list(&te, &te.usdc_id);
+    te.pool.fund_invoice(&invoice_id);
+
+    // funded_amount = 9_800_000_000, sending less should panic (#4 = InvalidAmount)
+    te.pool.receive_repayment(&invoice_id, &1_000_000_000);
+}
+
+// ============== DEFAULT TESTS ==============
+
+#[test]
+fn test_handle_default() {
+    let te = setup();
+    te.pool.deposit(&te.lp, &100_000_000_000);
+    let invoice_id = create_and_list(&te, &te.usdc_id);
+    te.pool.fund_invoice(&invoice_id);
+
+    // funded_amount = 10_000_000_000 * 9800 / 10000 = 9_800_000_000
+    let funded_amount = 9_800_000_000;
+
+    let before = te.pool.get_stats();
+    let result = te.pool.handle_default(&invoice_id);
+    assert!(result);
+
+    let after = te.pool.get_stats();
+    assert_eq!(after.total_deposits, before.total_deposits - funded_amount);
+    assert_eq!(after.total_funded, 0);
+    assert_eq!(after.active_invoice_count, 0);
+}
+
+#[test]
+fn test_handle_default_unknown_invoice_returns_false() {
+    let te = setup();
+    let dummy_id = BytesN::from_array(&te.env, &[0u8; 32]);
+    let result = te.pool.handle_default(&dummy_id);
+    assert!(!result);
+}
