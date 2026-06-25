@@ -22,25 +22,25 @@ impl EscrowContract {
         invoice_contract: Address,
         usdc_asset: Address,
     ) {
-        /// Initializes the escrow contract and stores required contract references.
-        ///
-        /// # Arguments
-        /// * `env` - The Soroban environment.
-        /// * `admin` - The admin address for this contract.
-        /// * `pool_contract` - The pool contract address.
-        /// * `invoice_contract` - The invoice contract address.
-        /// * `usdc_asset` - The USDC asset address.
-        ///
-        /// # Returns
-        /// * `()` - No value is returned.
-        ///
-        /// # Panics
-        /// * `AlreadyInitialized` if the contract has already been initialized.
-        ///
-        /// # Example
-        /// ```ignore
-        /// client.initialize(&admin, &pool, &invoice, &usdc);
-        /// ```
+        // Initializes the escrow contract and stores required contract references.
+        //
+        // # Arguments
+        // * `env` - The Soroban environment.
+        // * `admin` - The admin address for this contract.
+        // * `pool_contract` - The pool contract address.
+        // * `invoice_contract` - The invoice contract address.
+        // * `usdc_asset` - The USDC asset address.
+        //
+        // # Returns
+        // * `()` - No value is returned.
+        //
+        // # Panics
+        // * `AlreadyInitialized` if the contract has already been initialized.
+        //
+        // # Example
+        // ```ignore
+        // client.initialize(&admin, &pool, &invoice, &usdc);
+        // ```
         if env.storage().instance().has(&DataKey::Admin) {
             panic_with_error!(&env, EscrowError::AlreadyInitialized);
         }
@@ -59,24 +59,24 @@ impl EscrowContract {
     }
 
     pub fn lock(env: Env, invoice_id: BytesN<32>, amount: u128) -> bool {
-        /// Locks USDC in escrow against a funded invoice.
-        ///
-        /// # Arguments
-        /// * `env` - The Soroban environment.
-        /// * `invoice_id` - The invoice ID being locked.
-        /// * `amount` - The amount to lock.
-        ///
-        /// # Returns
-        /// * `bool` - `true` when the funds are locked.
-        ///
-        /// # Panics
-        /// * `InvalidAmount` if the amount is zero.
-        /// * `AlreadyLocked` if the invoice is already locked.
-        ///
-        /// # Example
-        /// ```ignore
-        /// client.lock(&invoice_id, &amount);
-        /// ```
+        // Locks USDC in escrow against a funded invoice.
+        //
+        // # Arguments
+        // * `env` - The Soroban environment.
+        // * `invoice_id` - The invoice ID being locked.
+        // * `amount` - The amount to lock.
+        //
+        // # Returns
+        // * `bool` - `true` when the funds are locked.
+        //
+        // # Panics
+        // * `InvalidAmount` if the amount is zero.
+        // * `AlreadyLocked` if the invoice is already locked.
+        //
+        // # Example
+        // ```ignore
+        // client.lock(&invoice_id, &amount);
+        // ```
         let pool: Address = env
             .storage()
             .instance()
@@ -112,23 +112,23 @@ impl EscrowContract {
     }
 
     pub fn release_to_issuer(env: Env, invoice_id: BytesN<32>, issuer: Address) -> bool {
-        /// Releases escrowed funds to the issuer.
-        ///
-        /// # Arguments
-        /// * `env` - The Soroban environment.
-        /// * `invoice_id` - The invoice whose escrow is released.
-        /// * `issuer` - The issuer address to receive funds.
-        ///
-        /// # Returns
-        /// * `bool` - `true` when funds are released.
-        ///
-        /// # Panics
-        /// * `NotFound` if no escrow record exists for the invoice.
-        ///
-        /// # Example
-        /// ```ignore
-        /// client.release_to_issuer(&invoice_id, &issuer);
-        /// ```
+        // Releases escrowed funds to the issuer.
+        //
+        // # Arguments
+        // * `env` - The Soroban environment.
+        // * `invoice_id` - The invoice whose escrow is released.
+        // * `issuer` - The issuer address to receive funds.
+        //
+        // # Returns
+        // * `bool` - `true` when funds are released.
+        //
+        // # Panics
+        // * `NotFound` if no escrow record exists for the invoice.
+        //
+        // # Example
+        // ```ignore
+        // client.release_to_issuer(&invoice_id, &issuer);
+        // ```
         let pool: Address = env
             .storage()
             .instance()
@@ -164,23 +164,23 @@ impl EscrowContract {
     }
 
     pub fn release_to_pool(env: Env, invoice_id: BytesN<32>, repayment_amount: u128) -> bool {
-        /// Releases escrowed funds back to the pool as repayment.
-        ///
-        /// # Arguments
-        /// * `env` - The Soroban environment.
-        /// * `invoice_id` - The invoice whose escrow is returned.
-        /// * `repayment_amount` - The amount returned to the pool.
-        ///
-        /// # Returns
-        /// * `bool` - `true` when funds are returned.
-        ///
-        /// # Panics
-        /// * `NotFound` if no escrow record exists for the invoice.
-        ///
-        /// # Example
-        /// ```ignore
-        /// client.release_to_pool(&invoice_id, &repayment_amount);
-        /// ```
+        // Releases escrowed funds back to the pool as repayment.
+        //
+        // # Arguments
+        // * `env` - The Soroban environment.
+        // * `invoice_id` - The invoice whose escrow is returned.
+        // * `repayment_amount` - The amount returned to the pool.
+        //
+        // # Returns
+        // * `bool` - `true` when funds are returned.
+        //
+        // # Panics
+        // * `NotFound` if no escrow record exists for the invoice.
+        //
+        // # Example
+        // ```ignore
+        // client.release_to_pool(&invoice_id, &repayment_amount);
+        // ```
         let pool: Address = env
             .storage()
             .instance()
@@ -263,19 +263,19 @@ impl EscrowContract {
     }
 
     pub fn get_locked(env: Env, invoice_id: BytesN<32>) -> u128 {
-        /// Returns the amount currently locked in escrow for an invoice.
-        ///
-        /// # Arguments
-        /// * `env` - The Soroban environment.
-        /// * `invoice_id` - The invoice to query.
-        ///
-        /// # Returns
-        /// * `u128` - The amount locked, or 0 if none exists.
-        ///
-        /// # Example
-        /// ```ignore
-        /// let locked = client.get_locked(&invoice_id);
-        /// ```
+        // Returns the amount currently locked in escrow for an invoice.
+        //
+        // # Arguments
+        // * `env` - The Soroban environment.
+        // * `invoice_id` - The invoice to query.
+        //
+        // # Returns
+        // * `u128` - The amount locked, or 0 if none exists.
+        //
+        // # Example
+        // ```ignore
+        // let locked = client.get_locked(&invoice_id);
+        // ```
         env.storage()
             .persistent()
             .get::<_, EscrowRecord>(&DataKey::Locked(invoice_id))
