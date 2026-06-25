@@ -334,8 +334,9 @@ impl PoolContract {
             .get(&DataKey::MaxUtilizationBps)
             .unwrap();
         let new_total_funded = total_funded + funded_amount;
-        let utilization_after =
-            (new_total_funded * 10000).checked_div(total_deposits).unwrap_or(0) as u32;
+        let utilization_after = (new_total_funded * 10000)
+            .checked_div(total_deposits)
+            .unwrap_or(0) as u32;
         if utilization_after > max_utilization_bps {
             panic_with_error!(&env, PoolError::UtilizationCapExceeded);
         }

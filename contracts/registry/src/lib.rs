@@ -30,7 +30,6 @@ impl RegistryContract {
     /// # Example
     /// ```ignore
     /// client.initialize(&admin);
-    
 
     /// ```
     pub fn initialize(env: Env, admin: Address) {
