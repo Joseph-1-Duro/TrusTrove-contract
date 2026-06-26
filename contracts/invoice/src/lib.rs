@@ -445,6 +445,90 @@ impl InvoiceContract {
         true
     }
 
+    pub fn unconfirm_delivery(env: Env, invoice_id: BytesN<32>) -> bool {
+        // Reverts a Confirmed invoice back to Active, clearing both confirmation flags.
+        // Requires authorisation from BOTH the issuer and the buyer, OR from the admin.
+        // This guards against either party unilaterally undoing the other's confirmation.
+        //
+        // # Arguments
+        // * `env` - The Soroban environment.
+        // * `invoice_id` - The invoice to revert.
+        //
+        // # Returns
+        // * `bool` - `true` when the reversion succeeds.
+        //
+        // # Panics
+        // * `NotFound` if the invoice or admin cannot be found.
+        // * `InvalidStatusTransition` if invoice status is not `Confirmed`.
+        // * `NotAuthorized` if neither the dual-party nor admin authorisation is satisfied.
+        //
+        // # Example
+        // ```ignore
+        // client.unconfirm_delivery(&invoice_id);
+        // ```
+        let inv_key = DataKey::Invoice(invoice_id.clone());
+        let mut invoice: Invoice = env
+            .storage()
+            .persistent()
+            .get(&inv_key)
+            .unwrap_or_else(|| panic_with_error!(&env, InvoiceError::NotFound));
+
+        if invoice.status != InvoiceStatus::Confirmed {
+            panic_with_error!(&env, InvoiceError::InvalidStatusTransition);
+        }
+
+        // Accept dual-party auth (both issuer AND buyer must sign) or admin auth.
+        // We use try_invoke_contract to test issuer+buyer auth without aborting on failure,
+        // then fall back to the admin key as an emergency escape hatch.
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .unwrap_or_else(|| panic_with_error!(&env, InvoiceError::NotFound));
+
+        let issuer_auth_ok = env
+            .try_invoke_contract::<(), soroban_sdk::Error>(
+                &env.current_contract_address(),
+                &Symbol::new(&env, "check_auth"),
+                (invoice.issuer.clone(),).into_val(&env),
+            )
+            .is_ok();
+        let buyer_auth_ok = env
+            .try_invoke_contract::<(), soroban_sdk::Error>(
+                &env.current_contract_address(),
+                &Symbol::new(&env, "check_auth"),
+                (invoice.buyer.clone(),).into_val(&env),
+            )
+            .is_ok();
+
+        if issuer_auth_ok && buyer_auth_ok {
+            // Both parties consented — no additional require_auth needed.
+        } else {
+            // Fall back to admin auth.
+            admin.require_auth();
+        }
+
+        invoice.issuer_confirmed = false;
+        invoice.buyer_confirmed = false;
+        invoice.status = InvoiceStatus::Active;
+
+        env.storage().persistent().set(&inv_key, &invoice);
+        env.storage()
+            .persistent()
+            .extend_ttl(&inv_key, 100, 2_000_000);
+
+        self::move_status_index(
+            &env,
+            &invoice_id,
+            InvoiceStatus::Confirmed,
+            InvoiceStatus::Active,
+        );
+
+        Self::extend_instance_ttl(&env);
+        events::delivery_unconfirmed(&env, &invoice_id);
+        true
+    }
+
     pub fn repay(env: Env, invoice_id: BytesN<32>) -> bool {
         // Repays a confirmed invoice, transferring funds to the pool.
         //

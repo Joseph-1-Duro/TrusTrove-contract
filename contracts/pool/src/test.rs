@@ -574,6 +574,19 @@ fn test_receive_repayment_panics_when_amount_below_funded() {
     te.pool.receive_repayment(&invoice_id, &1_000_000_000);
 }
 
+#[test]
+#[should_panic]
+fn test_receive_repayment_unauthorized_caller_panics() {
+    let te = setup();
+    te.pool.deposit(&te.lp, &100_000_000_000);
+    let invoice_id = create_and_list(&te, &te.usdc_id);
+    te.pool.fund_invoice(&invoice_id);
+
+    // Clear all auths - call should fail since invoice_contract.require_auth() is needed
+    te.env.set_auths(&[]);
+    te.pool.receive_repayment(&invoice_id, &10_000_000_000);
+}
+
 // ============== DEFAULT TESTS ==============
 
 #[test]
@@ -714,6 +727,19 @@ fn prop_lp_position_usdc_value_reflects_total_deposits() {
             Ok(())
         })
         .unwrap();
+}
+
+#[test]
+#[should_panic]
+fn test_handle_default_unauthorized_caller_panics() {
+    let te = setup();
+    te.pool.deposit(&te.lp, &100_000_000_000);
+    let invoice_id = create_and_list(&te, &te.usdc_id);
+    te.pool.fund_invoice(&invoice_id);
+
+    // Clear all auths - call should fail since invoice_contract.require_auth() is needed
+    te.env.set_auths(&[]);
+    te.pool.handle_default(&invoice_id);
 }
 
 #[test]
