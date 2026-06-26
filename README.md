@@ -156,11 +156,19 @@ No fund movement. Invoice status: Created → Listed.
 #### Step 3 — Fund Invoice (Pool → Escrow)
 Anyone can call `pool.fund_invoice(invoice_id)`. The pool computes the funded amount, locks it in escrow, and marks the invoice as funded.
 
-```
-funded_amount = face_value × (10000 − discount_bps) / 10000
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant pool_contract
+    participant escrow_contract
+    participant invoice_contract
 
-Pool ──[funded_amount USDC]──► Escrow  (locked per invoice_id)
-Invoice status: Listed → Funded
+    Caller->>pool_contract: fund_invoice(invoice_id)
+    Note over pool_contract: funded_amount = face_value × (10000 − discount_bps) / 10000
+    pool_contract->>escrow_contract: lock(invoice_id, funded_amount)
+    Note over pool_contract,escrow_contract: Transfers funded_amount USDC to Escrow
+    pool_contract->>invoice_contract: mark_funded(invoice_id, funded_amount)
+    Note over invoice_contract: Status: Listed → Funded
 ```
 
 The pool retains `face_value − funded_amount` (the discount) as accrued yield, collectible when the buyer repays.
@@ -184,11 +192,17 @@ No fund movement. Invoice status: Funded → Active → Confirmed.
 #### Step 6 — Repay (Buyer → Pool, bypassing Escrow)
 The buyer calls `invoice.repay(invoice_id)`, which transfers `face_value` USDC **directly from the buyer to the pool**, then calls `pool.receive_repayment` to account for the yield.
 
-```
-Buyer ──[face_value USDC]──► Pool
-  Pool books yield: face_value − funded_amount = discount earned
-  TotalDeposits += yield_amount  (share price rises for all LPs)
-Invoice status: Confirmed → Repaid
+```mermaid
+sequenceDiagram
+    participant Buyer
+    participant invoice_contract
+    participant pool_contract
+
+    Buyer->>invoice_contract: repay(invoice_id)
+    Note over Buyer,pool_contract: Buyer transfers face_value USDC to Pool
+    invoice_contract->>pool_contract: receive_repayment(invoice_id, amount)
+    Note over pool_contract: Books yield: face_value − funded_amount<br/>TotalDeposits += yield_amount
+    Note over invoice_contract: Status: Confirmed → Repaid
 ```
 
 Repayment does **not** flow through escrow. The escrow contract is only involved in funding (Step 3), the missing issuer release (Step 4), and default recovery (Step 7).
@@ -196,13 +210,19 @@ Repayment does **not** flow through escrow. The escrow contract is only involved
 #### Step 7 — Default (Escrow → Pool)
 If the invoice passes its `due_date` without reaching `Repaid`, any caller triggers `invoice.trigger_default`. The invoice contract calls `pool.handle_default`, which in turn calls `escrow.handle_default` — returning the still-locked `funded_amount` to the pool.
 
-```
-invoice.trigger_default()
-  └─► pool.handle_default()
-        └─► escrow.handle_default()
-              └─► Escrow ──[funded_amount USDC]──► Pool
-Invoice status: → Defaulted
-  TotalFunded -= funded_amount  (liquidity freed)
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant invoice_contract
+    participant pool_contract
+    participant escrow_contract
+
+    Caller->>invoice_contract: trigger_default(invoice_id)
+    invoice_contract->>pool_contract: handle_default(invoice_id)
+    pool_contract->>escrow_contract: handle_default(invoice_id, caller)
+    Note over escrow_contract,pool_contract: Escrow transfers funded_amount USDC back to Pool
+    Note over pool_contract: TotalFunded -= funded_amount (liquidity freed)
+    Note over invoice_contract: Status: → Defaulted
 ```
 
 ### Summary Table
