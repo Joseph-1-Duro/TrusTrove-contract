@@ -78,6 +78,13 @@ pub fn invoice_expired(env: &Env, invoice_id: &BytesN<32>) {
     );
 }
 
+pub fn escrow_contract_set(env: &Env, new_escrow: &Address) {
+    env.events().publish(
+        (Symbol::new(env, "escrow_contract_set"), new_escrow.clone()),
+        (),
+    );
+}
+
 pub fn pool_contract_set(env: &Env, new_pool: &Address) {
     env.events().publish(
         (Symbol::new(env, "pool_contract_set"), new_pool.clone()),

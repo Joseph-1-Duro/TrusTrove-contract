@@ -78,6 +78,36 @@ impl InvoiceContract {
         Self::extend_instance_ttl(&env);
     }
 
+    pub fn set_escrow_contract(env: Env, escrow_contract: Address) {
+        // Sets the escrow contract address used by this invoice contract.
+        //
+        // # Arguments
+        // * `env` - The Soroban environment.
+        // * `escrow_contract` - The escrow contract address.
+        //
+        // # Returns
+        // * `()` - No value is returned.
+        //
+        // # Panics
+        // * `NotFound` if the admin is not initialized.
+        //
+        // # Example
+        // ```ignore
+        // client.set_escrow_contract(&escrow_address);
+        // ```
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .unwrap_or_else(|| panic_with_error!(&env, InvoiceError::NotFound));
+        admin.require_auth();
+        env.storage()
+            .instance()
+            .set(&DataKey::EscrowContract, &escrow_contract);
+        events::escrow_contract_set(&env, &escrow_contract);
+        Self::extend_instance_ttl(&env);
+    }
+
     pub fn create(
         env: Env,
         issuer: Address,
@@ -530,7 +560,7 @@ impl InvoiceContract {
     }
 
     pub fn repay(env: Env, invoice_id: BytesN<32>) -> bool {
-        // Repays a confirmed invoice, transferring funds to the pool.
+        // Repays a confirmed invoice, routing funds through the escrow contract.
         //
         // # Arguments
         // * `env` - The Soroban environment.
@@ -540,7 +570,7 @@ impl InvoiceContract {
         // * `bool` - `true` when repayment is completed.
         //
         // # Panics
-        // * `NotFound` if the invoice cannot be found.
+        // * `NotFound` if the invoice or escrow contract cannot be found.
         // * `InvalidStatusTransition` if invoice status is not `Confirmed`.
         //
         // # Example
@@ -562,13 +592,29 @@ impl InvoiceContract {
             .funding_pool
             .clone()
             .unwrap_or_else(|| panic_with_error!(&env, InvoiceError::NotFound));
+        let escrow_address: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::EscrowContract)
+            .unwrap_or_else(|| panic_with_error!(&env, InvoiceError::NotFound));
         let face_value = invoice.face_value;
         let buyer = invoice.buyer.clone();
         let funding_asset = invoice.funding_asset.clone();
 
+        // Step 1: Transfer buyer USDC to escrow (not directly to pool)
         let token = token::Client::new(&env, &funding_asset);
-        token.transfer(&buyer, &pool, &(face_value as i128));
+        token.transfer(&buyer, &escrow_address, &(face_value as i128));
 
+        // Step 2: Escrow validates the amount matches locked amount and forwards to pool
+        let invoice_contract = env.current_contract_address();
+        let mut args = Vec::new(&env);
+        args.push_back(invoice_id.clone().into_val(&env));
+        args.push_back(face_value.into_val(&env));
+        args.push_back(invoice_contract.into_val(&env));
+        let _: bool =
+            env.invoke_contract(&escrow_address, &Symbol::new(&env, "release_to_pool"), args);
+
+        // Step 3: Pool records the repayment
         let mut args = Vec::new(&env);
         args.push_back(invoice_id.clone().into_val(&env));
         args.push_back(face_value.into_val(&env));

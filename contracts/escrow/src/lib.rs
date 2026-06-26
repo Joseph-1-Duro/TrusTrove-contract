@@ -163,30 +163,41 @@ impl EscrowContract {
         true
     }
 
-    pub fn release_to_pool(env: Env, invoice_id: BytesN<32>, repayment_amount: u128) -> bool {
+    pub fn release_to_pool(env: Env, invoice_id: BytesN<32>, repayment_amount: u128, caller: Address) -> bool {
         // Releases escrowed funds back to the pool as repayment.
         //
         // # Arguments
         // * `env` - The Soroban environment.
         // * `invoice_id` - The invoice whose escrow is returned.
         // * `repayment_amount` - The amount returned to the pool.
+        // * `caller` - The address calling this function (pool or invoice contract).
         //
         // # Returns
         // * `bool` - `true` when funds are returned.
         //
         // # Panics
         // * `NotFound` if no escrow record exists for the invoice.
+        // * `NotAuthorized` if the caller is not the pool or invoice contract.
         //
         // # Example
         // ```ignore
-        // client.release_to_pool(&invoice_id, &repayment_amount);
+        // client.release_to_pool(&invoice_id, &repayment_amount, &caller);
         // ```
         let pool: Address = env
             .storage()
             .instance()
             .get(&DataKey::PoolContract)
             .unwrap();
-        pool.require_auth();
+        let invoice_contract: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::InvoiceContract)
+            .unwrap();
+
+        caller.require_auth();
+        if caller != pool && caller != invoice_contract {
+            panic_with_error!(&env, EscrowError::NotAuthorized);
+        }
 
         let key = DataKey::Locked(invoice_id.clone());
         let record: EscrowRecord = env
@@ -195,7 +206,7 @@ impl EscrowContract {
             .get(&key)
             .unwrap_or_else(|| panic_with_error!(&env, EscrowError::NotFound));
 
-        if repayment_amount != record.amount {
+        if repayment_amount < record.amount {
             panic_with_error!(&env, EscrowError::InvalidAmount);
         }
 

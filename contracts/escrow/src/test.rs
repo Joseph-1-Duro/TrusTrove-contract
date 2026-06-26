@@ -205,7 +205,7 @@ fn test_release_to_pool_transfers_correct_amount() {
 
     client.lock(&invoice_id, &amount);
     let repayment: u128 = amount;
-    let result = client.release_to_pool(&invoice_id, &repayment);
+    let result = client.release_to_pool(&invoice_id, &repayment, &pool);
     assert!(result);
 
     let locked = client.get_locked(&invoice_id);
@@ -221,14 +221,14 @@ fn test_release_to_pool_transfers_correct_amount() {
 
 #[test]
 #[should_panic(expected = "Error(Contract, #5)")]
-fn test_release_to_pool_fails_on_mismatched_repayment_amount() {
-    let (env, client, _admin, _pool, _usdc) = setup();
+fn test_release_to_pool_fails_on_insufficient_repayment_amount() {
+    let (env, client, _admin, pool, _usdc) = setup();
     let invoice_id = generate_invoice_id(&env);
     let amount: u128 = 1_000_000_000;
 
     client.lock(&invoice_id, &amount);
-    let invalid_repayment: u128 = amount + 1;
-    client.release_to_pool(&invoice_id, &invalid_repayment);
+    let insufficient_repayment: u128 = amount - 1;
+    client.release_to_pool(&invoice_id, &insufficient_repayment, &pool);
 }
 
 #[test]
@@ -368,13 +368,13 @@ fn test_release_to_issuer_requires_pool_authorization() {
 #[test]
 #[should_panic]
 fn test_release_to_pool_requires_pool_authorization() {
-    let (env, client, _admin, _pool, _usdc) = setup();
+    let (env, client, _admin, pool, _usdc) = setup();
     let invoice_id = generate_invoice_id(&env);
     let amount: u128 = 1_000_000_000;
 
     client.lock(&invoice_id, &amount);
     env.set_auths(&[]);
-    client.release_to_pool(&invoice_id, &amount);
+    client.release_to_pool(&invoice_id, &amount, &pool);
 }
 
 #[test]
