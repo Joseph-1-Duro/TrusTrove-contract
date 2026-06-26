@@ -124,6 +124,15 @@ impl PoolContract {
             .get(&DataKey::TotalDeposits)
             .unwrap();
 
+        // Share issuance preserves the current share price for existing LPs.
+        // On the first deposit (no shares or deposits yet) shares are issued 1:1 with USDC,
+        // establishing the initial price of 1 share = 1 USDC.
+        // On subsequent deposits:
+        //   shares_to_issue = usdc_amount / share_price
+        //                   = usdc_amount * total_shares / total_deposits
+        // This means a new LP gets proportionally fewer shares if the share price has risen
+        // (because existing LPs earned yield), which is the correct behaviour — it prevents
+        // a new depositor from diluting the yield already accrued by earlier LPs.
         let shares_to_issue = if total_shares == 0 || total_deposits == 0 {
             usdc_amount
         } else {
@@ -218,6 +227,10 @@ impl PoolContract {
         let total_funded: u128 = env.storage().instance().get(&DataKey::TotalFunded).unwrap();
         let available = total_deposits - total_funded;
 
+        // Redemption value = shares * share_price = shares * (total_deposits / total_shares).
+        // total_deposits grows each time a repayment is received (yield is credited to the pool)
+        // while total_shares only changes on deposit/withdraw.  The rising ratio rewards LPs
+        // who stayed in the pool while invoices were repaid.
         let usdc_to_return = shares * total_deposits / total_shares;
         if usdc_to_return > available {
             panic_with_error!(&env, PoolError::InsufficientLiquidity);

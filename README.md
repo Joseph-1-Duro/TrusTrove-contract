@@ -173,14 +173,14 @@ sequenceDiagram
 
 The pool retains `face_value − funded_amount` (the discount) as accrued yield, collectible when the buyer repays.
 
-#### Step 4 — Release to Issuer (Escrow → Issuer) ⚠️ Known Gap
+#### Step 4 — Release to Issuer (Escrow → Issuer)
 The pool contract is expected to call `escrow.release_to_issuer(invoice_id, issuer)` so that the locked USDC reaches the issuer who can then ship goods.
 
 ```
 Escrow ──[funded_amount USDC]──► Issuer
 ```
 
-**⚠️ This call is not yet wired into `fund_invoice` (see [Issue #56](https://github.com/TrusTrove/TrusTrove-contract/issues/56)).** In the current deployment, issuers do not automatically receive USDC after an invoice is funded. This is the highest-priority gap before mainnet.
+> **Note:** This transfer is not yet wired into `fund_invoice`. See [Issue #56](https://github.com/TrusTrove/TrusTrove-contract/issues/56) for tracking status and implementation details.
 
 #### Step 5 — Ship & Confirm (no funds move)
 The issuer calls `mark_shipped`. Then **both** the issuer and the buyer must independently call `confirm_delivery`. Only when both confirmations are recorded does the invoice advance to `Confirmed`.
@@ -232,7 +232,7 @@ sequenceDiagram
 | LP deposit | LP wallet | Pool | `usdc_amount` | No |
 | LP withdraw | Pool | LP wallet | `shares × price` | No |
 | Fund invoice | Pool | Escrow | `face_value × (1 − discount)` | Yes — locks |
-| Release to issuer *(gap)* | Escrow | Issuer | `funded_amount` | Yes — releases |
+| Release to issuer ([#56](https://github.com/TrusTrove/TrusTrove-contract/issues/56)) | Escrow | Issuer | `funded_amount` | Yes — releases |
 | Repay | Buyer wallet | Pool | `face_value` | No |
 | Default recovery | Escrow | Pool | `funded_amount` | Yes — releases |
 
@@ -303,6 +303,46 @@ The deploy script prints all four contract IDs at the end. Paste them into `Trus
 
 ---
 
+## Configuration Guide
+
+After deploying, two on-chain parameters control economic behaviour. Both are set via admin-only calls and take effect immediately without redeployment.
+
+### `max_utilization_bps` — Pool (default: 8500)
+
+Controls what fraction of pooled USDC can be locked in active invoices at any time. Expressed in basis points (1 bp = 0.01%).
+
+```
+pool_contract.set_max_utilization(&admin, new_cap_bps)
+```
+
+| Value | Meaning | Trade-off |
+|-------|---------|-----------|
+| `8500` (default) | 85 % of deposits may be deployed | Leaves a 15 % liquidity buffer for withdrawals |
+| `10000` | 100 % utilization allowed | Maximum yield but LPs cannot withdraw while fully deployed |
+| `5000` | 50 % cap | Conservative — large buffer, lower capital efficiency |
+
+**Risk of setting too high:** LPs may be unable to withdraw if all capital is locked in open invoices.  
+**Risk of setting too low:** Eligible invoices are rejected even when the pool has ample deposits, reducing yield for LPs and funding access for issuers.
+
+### `expiry_window` — Invoice (default: 604800 seconds / 7 days)
+
+How long a `Listed` invoice can remain unfunded before it is eligible to be expired. Expired listings are removed from the active pool, preventing stagnant invoices from cluttering the book.
+
+```
+invoice_contract.set_expiry_window(&admin, window_seconds)
+```
+
+| Value | Meaning | Trade-off |
+|-------|---------|-----------|
+| `604800` (default) | 7 days | Reasonable time for LPs to discover and fund an invoice |
+| `259200` | 3 days | Faster cleanup; may expire genuine invoices in low-activity periods |
+| `1209600` | 14 days | More time for funding discovery; stale listings linger longer |
+
+**Risk of setting too short:** Legitimate invoices expire before they can be funded during periods of low protocol activity.  
+**Risk of setting too long:** The listed-invoice queue fills with unfundable or abandoned listings, degrading signal quality for LPs.
+
+---
+
 ## Known Centralization Risks & Roadmap
 
 TrusTrove is in active development on Stellar testnet. Several centralization trade-offs were made deliberately to ship a working protocol quickly. They are documented here so contributors and users understand the current trust model and can help drive the path to a more decentralized design.
@@ -346,6 +386,18 @@ If you want to contribute to governance design, open an issue tagged `complexity
 There is currently no circuit breaker. If a critical bug is found post-deployment the only recourse is to stop directing traffic to the affected contracts via the frontend.
 
 **Roadmap:** Add an `admin_pause() / admin_unpause()` function pair to each contract, guarded behind multi-sig, that blocks state-changing calls while reads remain live.
+
+---
+
+## Known Gaps
+
+The following gaps are tracked as open GitHub issues. Do not rely on the README as the source of truth — check the issue tracker for current status.
+
+| Gap | Issue | Priority |
+|-----|-------|----------|
+| `escrow.release_to_issuer` not called from `fund_invoice` — issuers do not receive USDC after funding | [#56](https://github.com/TrusTrove/TrusTrove-contract/issues/56) | Highest — blocks mainnet |
+| No emergency pause mechanism across contracts | [Roadmap](#no-emergency-pause-mechanism) | High |
+| Admin key is a single EOA with no multi-sig | [Roadmap](#admin-key-controls-critical-operations) | High |
 
 ---
 
