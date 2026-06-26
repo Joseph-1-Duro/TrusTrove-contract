@@ -41,6 +41,7 @@ impl InvoiceContract {
         env.storage()
             .instance()
             .set(&DataKey::PoolContract, &pool_contract);
+        events::pool_contract_set(&env, &pool_contract);
         Self::extend_instance_ttl(&env);
     }
 
@@ -527,6 +528,7 @@ impl InvoiceContract {
         env.storage()
             .instance()
             .set(&DataKey::ExpiryWindow, &window);
+        events::expiry_window_set(&env, window);
         Self::extend_instance_ttl(&env);
     }
 

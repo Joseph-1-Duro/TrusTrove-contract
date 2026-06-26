@@ -1,8 +1,10 @@
 #![cfg(test)]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, testutils::Address as _, testutils::Ledger, Address,
-    BytesN, Env, IntoVal, Symbol,
+    contract, contractimpl, contracttype,
+    testutils::{Address as _, Events as _},
+    testutils::Ledger,
+    vec, Address, BytesN, Env, IntoVal, Symbol,
 };
 
 use crate::{InvoiceContract, InvoiceContractClient, InvoiceStatus};
@@ -512,6 +514,50 @@ fn test_expire_listing_configurable_window() {
     let result = client.expire_listing(&invoice_id);
     assert!(result);
     assert_eq!(client.get(&invoice_id).status, InvoiceStatus::Expired);
+}
+
+#[test]
+fn test_set_pool_contract_emits_event() {
+    let (env, client, _, _, _, _) = setup();
+    let pool = Address::generate(&env);
+
+    client.set_pool_contract(&pool);
+
+    let contract_id = client.address.clone();
+    let events = env.events().all();
+    assert_eq!(
+        events,
+        vec![
+            &env,
+            (
+                contract_id,
+                (Symbol::new(&env, "pool_contract_set"), pool.clone()).into_val(&env),
+                ().into_val(&env),
+            )
+        ]
+    );
+}
+
+#[test]
+fn test_set_expiry_window_emits_event() {
+    let (env, client, _, _, _, _) = setup();
+    let window: u64 = 86400;
+
+    client.set_expiry_window(&window);
+
+    let contract_id = client.address.clone();
+    let events = env.events().all();
+    assert_eq!(
+        events,
+        vec![
+            &env,
+            (
+                contract_id,
+                (Symbol::new(&env, "expiry_window_set"),).into_val(&env),
+                window.into_val(&env),
+            )
+        ]
+    );
 }
 
 #[test]
