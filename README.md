@@ -107,6 +107,125 @@ get_lp_position(address) → LPPosition
 
 ---
 
+## Architecture & Fund Flow
+
+### Contract Interaction Map
+
+```
+                    ┌─────────────────┐
+                    │  registry_contract │
+                    │  (identity oracle) │
+                    └────────┬────────┘
+                             │ is_verified()
+          ┌──────────────────▼──────────────────┐
+          │           invoice_contract            │
+          │  (lifecycle state machine & indexer)  │
+          └──────┬────────────────────┬──────────┘
+                 │ mark_funded()      │ receive_repayment()
+                 │ trigger_default()  │ handle_default()
+          ┌──────▼───────┐    ┌───────▼──────────┐
+          │ pool_contract │    │  pool_contract   │
+          │  fund_invoice │    │  (repayment in)  │
+          └──────┬────────┘    └──────────────────┘
+                 │ lock()
+          ┌──────▼────────────┐
+          │  escrow_contract  │
+          │  (USDC custody)   │
+          └───────────────────┘
+```
+
+### Invoice Lifecycle & Fund Movement
+
+Each step below documents what happens to USDC and which contracts are called.
+
+#### Step 1 — Liquidity Provision (LP → Pool)
+LPs deposit USDC into the pool and receive shares proportional to their contribution. Share price grows as invoices repay.
+
+```
+LP ──[USDC]──► Pool
+Pool ──[shares]──► LP
+```
+
+#### Step 2 — Create & List (no funds move)
+The issuer creates an invoice (recording `face_value`, `due_date`, `buyer`, `funding_asset`), then lists it with a `discount_bps` expressing the yield they will give up in exchange for immediate liquidity.
+
+```
+No fund movement. Invoice status: Created → Listed.
+```
+
+#### Step 3 — Fund Invoice (Pool → Escrow)
+Anyone can call `pool.fund_invoice(invoice_id)`. The pool computes the funded amount, locks it in escrow, and marks the invoice as funded.
+
+```
+funded_amount = face_value × (10000 − discount_bps) / 10000
+
+Pool ──[funded_amount USDC]──► Escrow  (locked per invoice_id)
+Invoice status: Listed → Funded
+```
+
+The pool retains `face_value − funded_amount` (the discount) as accrued yield, collectible when the buyer repays.
+
+#### Step 4 — Release to Issuer (Escrow → Issuer) ⚠️ Known Gap
+The pool contract is expected to call `escrow.release_to_issuer(invoice_id, issuer)` so that the locked USDC reaches the issuer who can then ship goods.
+
+```
+Escrow ──[funded_amount USDC]──► Issuer
+```
+
+**⚠️ This call is not yet wired into `fund_invoice` (see [Issue #56](https://github.com/TrusTrove/TrusTrove-contract/issues/56)).** In the current deployment, issuers do not automatically receive USDC after an invoice is funded. This is the highest-priority gap before mainnet.
+
+#### Step 5 — Ship & Confirm (no funds move)
+The issuer calls `mark_shipped`. Then **both** the issuer and the buyer must independently call `confirm_delivery`. Only when both confirmations are recorded does the invoice advance to `Confirmed`.
+
+```
+No fund movement. Invoice status: Funded → Active → Confirmed.
+```
+
+#### Step 6 — Repay (Buyer → Pool, bypassing Escrow)
+The buyer calls `invoice.repay(invoice_id)`, which transfers `face_value` USDC **directly from the buyer to the pool**, then calls `pool.receive_repayment` to account for the yield.
+
+```
+Buyer ──[face_value USDC]──► Pool
+  Pool books yield: face_value − funded_amount = discount earned
+  TotalDeposits += yield_amount  (share price rises for all LPs)
+Invoice status: Confirmed → Repaid
+```
+
+Repayment does **not** flow through escrow. The escrow contract is only involved in funding (Step 3), the missing issuer release (Step 4), and default recovery (Step 7).
+
+#### Step 7 — Default (Escrow → Pool)
+If the invoice passes its `due_date` without reaching `Repaid`, any caller triggers `invoice.trigger_default`. The invoice contract calls `pool.handle_default`, which in turn calls `escrow.handle_default` — returning the still-locked `funded_amount` to the pool.
+
+```
+invoice.trigger_default()
+  └─► pool.handle_default()
+        └─► escrow.handle_default()
+              └─► Escrow ──[funded_amount USDC]──► Pool
+Invoice status: → Defaulted
+  TotalFunded -= funded_amount  (liquidity freed)
+```
+
+### Summary Table
+
+| Event | Source | Destination | Amount | Escrow involved? |
+|---|---|---|---|---|
+| LP deposit | LP wallet | Pool | `usdc_amount` | No |
+| LP withdraw | Pool | LP wallet | `shares × price` | No |
+| Fund invoice | Pool | Escrow | `face_value × (1 − discount)` | Yes — locks |
+| Release to issuer *(gap)* | Escrow | Issuer | `funded_amount` | Yes — releases |
+| Repay | Buyer wallet | Pool | `face_value` | No |
+| Default recovery | Escrow | Pool | `funded_amount` | Yes — releases |
+
+### Security Invariants
+
+- The escrow contract only accepts `lock()` calls from the registered `pool_contract`.
+- `release_to_issuer` and `release_to_pool` are callable only by `pool_contract`.
+- `handle_default` in escrow accepts the pool or the admin (emergency recovery path).
+- `receive_repayment` in the pool is callable only by the registered `invoice_contract`.
+- Every state transition in `invoice_contract` is guarded by an explicit status check; no skipping steps.
+
+---
+
 ## Deployed Contracts (Stellar Testnet)
 
 | Contract | Address |
