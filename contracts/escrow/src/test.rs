@@ -1,5 +1,7 @@
 #![cfg(test)]
 
+use proptest::prelude::*;
+use proptest::test_runner::{Config as ProptestConfig, TestRunner};
 use soroban_sdk::{
     contract, contractimpl, contracttype, testutils::Address as _, testutils::Events as _, Address,
     BytesN, Env, Symbol, TryFromVal, Vec,
@@ -388,4 +390,69 @@ fn test_handle_default_requires_pool_authorization() {
     env.set_auths(&[]);
     // No auth entries present — require_auth() on the pool caller must fail
     client.handle_default(&invoice_id, &pool);
+}
+
+// ============== PROPERTY-BASED INVARIANT TESTS ==============
+
+#[test]
+fn prop_locked_amount_always_equals_get_locked_after_lock() {
+    let mut runner = TestRunner::new(ProptestConfig::with_cases(10));
+    runner
+        .run(&(1u128..=10_000_000_000_000u128), |amount| {
+            let (env, client, _admin, _pool, _usdc) = setup();
+            let invoice_id = generate_invoice_id(&env);
+            client.lock(&invoice_id, &amount);
+            prop_assert_eq!(client.get_locked(&invoice_id), amount);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn prop_get_locked_returns_zero_after_release_to_issuer() {
+    let mut runner = TestRunner::new(ProptestConfig::with_cases(10));
+    runner
+        .run(&(1u128..=10_000_000_000_000u128), |amount| {
+            let (env, client, _admin, _pool, _usdc) = setup();
+            let invoice_id = generate_invoice_id(&env);
+            let issuer = Address::generate(&env);
+            client.lock(&invoice_id, &amount);
+            client.release_to_issuer(&invoice_id, &issuer);
+            prop_assert_eq!(client.get_locked(&invoice_id), 0);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn prop_get_locked_returns_zero_after_handle_default() {
+    let mut runner = TestRunner::new(ProptestConfig::with_cases(10));
+    runner
+        .run(&(1u128..=10_000_000_000_000u128), |amount| {
+            let (env, client, _admin, pool, _usdc) = setup();
+            let invoice_id = generate_invoice_id(&env);
+            client.lock(&invoice_id, &amount);
+            client.handle_default(&invoice_id, &pool);
+            prop_assert_eq!(client.get_locked(&invoice_id), 0);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn prop_history_length_grows_with_each_operation() {
+    let mut runner = TestRunner::new(ProptestConfig::with_cases(10));
+    runner
+        .run(&(1u128..=10_000_000_000_000u128), |amount| {
+            let (env, client, _admin, _pool, _usdc) = setup();
+            let invoice_id = generate_invoice_id(&env);
+            let issuer = Address::generate(&env);
+            prop_assert_eq!(client.get_history(&invoice_id).len(), 0);
+            client.lock(&invoice_id, &amount);
+            prop_assert_eq!(client.get_history(&invoice_id).len(), 1);
+            client.release_to_issuer(&invoice_id, &issuer);
+            prop_assert_eq!(client.get_history(&invoice_id).len(), 2);
+            Ok(())
+        })
+        .unwrap();
 }

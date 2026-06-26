@@ -1,6 +1,8 @@
 #![cfg(test)]
 
 use crate::{RegistryContract, RegistryContractClient};
+use proptest::prelude::*;
+use proptest::test_runner::{Config as ProptestConfig, TestRunner};
 use soroban_sdk::{map, testutils::Address as _, vec, Address, Env, String, Vec};
 
 use crate::VerificationStatus;
@@ -345,4 +347,91 @@ fn test_get_verification_status_re_verified_returns_verified() {
         client.get_verification_status(&issuer),
         VerificationStatus::Verified
     );
+}
+
+// ============== PROPERTY-BASED INVARIANT TESTS ==============
+
+#[test]
+fn prop_is_verified_always_consistent_with_get_verification_status_after_register() {
+    let mut runner = TestRunner::new(ProptestConfig::with_cases(10));
+    runner
+        .run(&(0u32..=1u32), |_seed| {
+            let (env, client) = setup();
+            let admin = Address::generate(&env);
+            client.initialize(&admin);
+            let address = Address::generate(&env);
+            client.register_issuer(&address, &map![&env]);
+            let verified = client.is_verified(&address);
+            let status = client.get_verification_status(&address);
+            prop_assert!(verified);
+            prop_assert_eq!(status, VerificationStatus::Verified);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn prop_revoke_always_sets_is_verified_false_and_status_revoked() {
+    let mut runner = TestRunner::new(ProptestConfig::with_cases(10));
+    runner
+        .run(&(0u32..=1u32), |_seed| {
+            let (env, client) = setup();
+            let admin = Address::generate(&env);
+            client.initialize(&admin);
+            let address = Address::generate(&env);
+            client.register_issuer(&address, &map![&env]);
+            client.revoke(&address);
+            prop_assert!(!client.is_verified(&address));
+            prop_assert_eq!(
+                client.get_verification_status(&address),
+                VerificationStatus::Revoked
+            );
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn prop_unregistered_address_never_verified() {
+    let mut runner = TestRunner::new(ProptestConfig::with_cases(10));
+    runner
+        .run(&(0u32..=1u32), |_seed| {
+            let (env, client) = setup();
+            let admin = Address::generate(&env);
+            client.initialize(&admin);
+            let unknown = Address::generate(&env);
+            prop_assert!(!client.is_verified(&unknown));
+            prop_assert_eq!(
+                client.get_verification_status(&unknown),
+                VerificationStatus::Unregistered
+            );
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn prop_re_verify_after_revoke_restores_verified_state() {
+    let mut runner = TestRunner::new(ProptestConfig::with_cases(10));
+    runner
+        .run(&(0u32..=1u32), |_seed| {
+            let (env, client) = setup();
+            let admin = Address::generate(&env);
+            client.initialize(&admin);
+            let address = Address::generate(&env);
+            client.register_issuer(&address, &map![&env]);
+            client.revoke(&address);
+            prop_assert_eq!(
+                client.get_verification_status(&address),
+                VerificationStatus::Revoked
+            );
+            client.verify_profile(&address, &true);
+            prop_assert!(client.is_verified(&address));
+            prop_assert_eq!(
+                client.get_verification_status(&address),
+                VerificationStatus::Verified
+            );
+            Ok(())
+        })
+        .unwrap();
 }
