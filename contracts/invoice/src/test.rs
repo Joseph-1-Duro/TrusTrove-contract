@@ -849,7 +849,7 @@ fn prop_expiry_window_bounds_are_respected_across_values() {
             client.list_for_financing(&id, &200);
             env.ledger()
                 .set_timestamp(env.ledger().timestamp() + window + 1);
-            let expired = client.expire_listing(&id);
+            let expired = client.expire_listing(&id, &issuer);
             prop_assert!(expired);
             prop_assert_eq!(client.get(&id).status, InvoiceStatus::Expired);
             Ok(())
