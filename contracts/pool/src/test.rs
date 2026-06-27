@@ -1,5 +1,7 @@
 #![cfg(test)]
 
+use proptest::prelude::*;
+use proptest::test_runner::{Config as ProptestConfig, TestRunner};
 use soroban_sdk::{
     contract, contractimpl, contracttype, testutils::Address as _, Address, BytesN, Env,
 };
@@ -613,6 +615,118 @@ fn test_handle_default_unknown_invoice_returns_false() {
     let dummy_id = BytesN::from_array(&te.env, &[0u8; 32]);
     let result = te.pool.handle_default(&dummy_id);
     assert!(!result);
+}
+
+// ============== PROPERTY-BASED INVARIANT TESTS ==============
+// Each test uses proptest's TestRunner directly (plain Rust syntax, no
+// proptest! macro) so rustfmt formats them without issues.  The case
+// budget is intentionally small (10 per property) to keep CI runtime
+// in check given the Soroban host's per-iteration overhead.
+
+#[test]
+fn prop_first_deposit_issues_one_to_one_shares() {
+    let mut runner = TestRunner::new(ProptestConfig::with_cases(10));
+    runner
+        .run(&(1u128..=10_000_000_000_000u128), |amount| {
+            let te = setup();
+            let shares = te.pool.deposit(&te.lp, &amount);
+            prop_assert_eq!(shares, amount);
+            let stats = te.pool.get_stats();
+            prop_assert_eq!(stats.total_deposits, amount);
+            prop_assert_eq!(stats.total_shares, amount);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn prop_available_liquidity_equals_deposits_minus_funded() {
+    let mut runner = TestRunner::new(ProptestConfig::with_cases(10));
+    runner
+        .run(&(1u128..=10_000_000_000_000u128), |amount| {
+            let te = setup();
+            te.pool.deposit(&te.lp, &amount);
+            let stats = te.pool.get_stats();
+            prop_assert_eq!(
+                stats.available_liquidity,
+                stats.total_deposits - stats.total_funded
+            );
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn prop_full_withdraw_returns_exact_deposited_amount() {
+    let mut runner = TestRunner::new(ProptestConfig::with_cases(10));
+    runner
+        .run(&(1u128..=10_000_000_000_000u128), |amount| {
+            let te = setup();
+            let shares = te.pool.deposit(&te.lp, &amount);
+            let returned = te.pool.withdraw(&te.lp, &shares);
+            prop_assert_eq!(returned, amount);
+            let stats = te.pool.get_stats();
+            prop_assert_eq!(stats.total_deposits, 0);
+            prop_assert_eq!(stats.total_shares, 0);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn prop_two_sequential_deposits_total_shares_equal_total_deposits() {
+    let mut runner = TestRunner::new(ProptestConfig::with_cases(10));
+    runner
+        .run(
+            &(1u128..=5_000_000_000_000u128, 1u128..=5_000_000_000_000u128),
+            |(a, b)| {
+                let te = setup();
+                let s1 = te.pool.deposit(&te.lp, &a);
+                let s2 = te.pool.deposit(&te.lp, &b);
+                prop_assert_eq!(s1 + s2, a + b);
+                let stats = te.pool.get_stats();
+                prop_assert_eq!(stats.total_shares, stats.total_deposits);
+                Ok(())
+            },
+        )
+        .unwrap();
+}
+
+#[test]
+fn prop_share_price_never_decreases_after_repayment() {
+    // Deposit must exceed the funded_amount for the fixed test invoice
+    // (face_value=10_000_000_000, discount_bps=200 → funded=9_800_000_000).
+    let mut runner = TestRunner::new(ProptestConfig::with_cases(10));
+    runner
+        .run(&(9_800_000_000u128..=10_000_000_000_000u128), |deposit| {
+            let te = setup();
+            te.pool.deposit(&te.lp, &deposit);
+            let value_before = te.pool.get_lp_position(&te.lp).usdc_value;
+            fund_and_repay_invoice(&te);
+            let value_after = te.pool.get_lp_position(&te.lp).usdc_value;
+            prop_assert!(
+                value_after >= value_before,
+                "share price decreased: before={value_before} after={value_after}"
+            );
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn prop_lp_position_usdc_value_reflects_total_deposits() {
+    let mut runner = TestRunner::new(ProptestConfig::with_cases(10));
+    runner
+        .run(&(1u128..=10_000_000_000_000u128), |amount| {
+            let te = setup();
+            te.pool.deposit(&te.lp, &amount);
+            let pos = te.pool.get_lp_position(&te.lp);
+            // Single LP owns all shares, so usdc_value == total_deposits
+            let stats = te.pool.get_stats();
+            prop_assert_eq!(pos.usdc_value, stats.total_deposits);
+            Ok(())
+        })
+        .unwrap();
 }
 
 #[test]
