@@ -48,7 +48,7 @@
                 {
                   "u128": {
                     "hi": 0,
-                    "lo": 1000000000
+                    "lo": 6109249833392
                   }
                 }
               ]
@@ -65,16 +65,10 @@
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
-              "function_name": "release_to_pool",
+              "function_name": "handle_default",
               "args": [
                 {
                   "bytes": "0000000000000000000000000000000000000000000000000000000000000000"
-                },
-                {
-                  "u128": {
-                    "hi": 0,
-                    "lo": 1000000001
-                  }
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
@@ -85,7 +79,8 @@
           "sub_invocations": []
         }
       ]
-    ]
+    ],
+    []
   ],
   "ledger": {
     "protocol_version": 21,
@@ -228,7 +223,7 @@
                 "val": {
                   "i128": {
                     "hi": 0,
-                    "lo": 10000000000001
+                    "lo": 10000000000000
                   }
                 }
               }
@@ -269,8 +264,8 @@
                 "durability": "persistent",
                 "val": {
                   "i128": {
-                    "hi": -1,
-                    "lo": 18446744073709551615
+                    "hi": 0,
+                    "lo": 0
                   }
                 }
               }
@@ -370,7 +365,7 @@
                           "val": {
                             "u128": {
                               "hi": 0,
-                              "lo": 1000000000
+                              "lo": 6109249833392
                             }
                           }
                         },
@@ -401,7 +396,7 @@
                           "val": {
                             "vec": [
                               {
-                                "symbol": "ReleasedToPool"
+                                "symbol": "DefaultHandled"
                               }
                             ]
                           }
@@ -413,7 +408,7 @@
                           "val": {
                             "u128": {
                               "hi": 0,
-                              "lo": 1000000001
+                              "lo": 6109249833392
                             }
                           }
                         },
@@ -635,7 +630,7 @@
                 {
                   "u128": {
                     "hi": 0,
-                    "lo": 1000000000
+                    "lo": 6109249833392
                   }
                 }
               ]
@@ -674,7 +669,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 1000000000
+                    "lo": 6109249833392
                   }
                 }
               ]
@@ -723,7 +718,7 @@
             "data": {
               "u128": {
                 "hi": 0,
-                "lo": 1000000000
+                "lo": 6109249833392
               }
             }
           }
@@ -769,19 +764,13 @@
                 "bytes": "0000000000000000000000000000000000000000000000000000000000000004"
               },
               {
-                "symbol": "release_to_pool"
+                "symbol": "handle_default"
               }
             ],
             "data": {
               "vec": [
                 {
                   "bytes": "0000000000000000000000000000000000000000000000000000000000000000"
-                },
-                {
-                  "u128": {
-                    "hi": 0,
-                    "lo": 1000000001
-                  }
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
@@ -822,7 +811,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 1000000001
+                    "lo": 6109249833392
                   }
                 }
               ]
@@ -862,7 +851,7 @@
           "v0": {
             "topics": [
               {
-                "symbol": "released_to_pool"
+                "symbol": "default_resolved"
               },
               {
                 "bytes": "0000000000000000000000000000000000000000000000000000000000000000"
@@ -874,7 +863,7 @@
             "data": {
               "u128": {
                 "hi": 0,
-                "lo": 1000000001
+                "lo": 6109249833392
               }
             }
           }
@@ -894,11 +883,63 @@
                 "symbol": "fn_return"
               },
               {
-                "symbol": "release_to_pool"
+                "symbol": "handle_default"
               }
             ],
             "data": {
               "bool": true
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": null,
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_call"
+              },
+              {
+                "bytes": "0000000000000000000000000000000000000000000000000000000000000004"
+              },
+              {
+                "symbol": "get_locked"
+              }
+            ],
+            "data": {
+              "bytes": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000004",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_return"
+              },
+              {
+                "symbol": "get_locked"
+              }
+            ],
+            "data": {
+              "u128": {
+                "hi": 0,
+                "lo": 0
+              }
             }
           }
         }
